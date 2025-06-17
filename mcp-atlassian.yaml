@@ -1,0 +1,103 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp-atlassian
+
+---
+# Generate base64 for your token: echo -n 'YOUR_ATLASSIAN_API_TOKEN' | base64
+apiVersion: v1
+kind: Secret
+metadata:
+  name: atlassian-credentials
+  namespace: mcp-atlassian
+type: Opaque
+data:
+  # Make sure this key matches what the app expects
+  CONFLUENCE_API_TOKEN: QVRBVFQzeEZmR0YweDdvdkMyU3FkTkwzcmd4dzRyWEFPQVBQV0ZSb1JqWkVxV0l6VmpyUllzcGtRZlhGbXFHV0pDUTctWHRCYmpFM2gwQjhtNm5ROGRVYVNqd2JaVW04bG1rcWN3QUthd0djU0d5TzlFUlA1U095dXZ1MjlURHpXQlloRkhZRWlQNFR6ZjVEcTBERm5PelZKYmIzV1lBa0tJWmJ3MmJLRFFFeFYwTXdXRTZUdVlrPURBMTQzRkRE
+  JIRA_API_TOKEN: QVRBVFQzeEZmR0YweDdvdkMyU3FkTkwzcmd4dzRyWEFPQVBQV0ZSb1JqWkVxV0l6VmpyUllzcGtRZlhGbXFHV0pDUTctWHRCYmpFM2gwQjhtNm5ROGRVYVNqd2JaVW04bG1rcWN3QUthd0djU0d5TzlFUlA1U095dXZ1MjlURHpXQlloRkhZRWlQNFR6ZjVEcTBERm5PelZKYmIzV1lBa0tJWmJ3MmJLRFFFeFYwTXdXRTZUdVlrPURBMTQzRkRE
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-atlassian-env
+  namespace: mcp-atlassian
+data:
+  CONFLUENCE_URL: "https://seanexxt.atlassian.net/wiki"
+  CONFLUENCE_USERNAME: "michael@re-cinq.com"
+  CONFLUENCE_SSL_VERIFY: "true"
+  JIRA_URL: "https://seanexxt.atlassian.net"
+  JIRA_USERNAME: "michael@re-cinq.com"
+  READ_ONLY_MODE: "true"
+  MCP_VERY_VERBOSE: "false"
+  ENABLED_TOOLS: "confluence_search,confluence_get_page,jira_get_issue,jira_search"
+  CONFLUENCE_SPACES_FILTER: "SP1"
+  JIRA_PROJECTS_FILTER: "S20"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-atlassian-deployment
+  namespace: mcp-atlassian
+  labels:
+    app: mcp-atlassian
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-atlassian
+  template:
+    metadata:
+      labels:
+        app: mcp-atlassian
+    spec:
+      containers:
+      - name: mcp-atlassian
+        image: ghcr.io/sooperset/mcp-atlassian:latest
+        args: ["--transport", "sse", "--port", "9000"]
+        ports:
+        - containerPort: 9000
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 9000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        envFrom:
+        - configMapRef:
+            name: mcp-atlassian-env
+        - secretRef:
+            name: atlassian-credentials
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-atlassian-service
+  namespace: mcp-atlassian
+spec:
+  type: ClusterIP
+  selector:
+    app: mcp-atlassian
+  ports:
+    - protocol: TCP
+      port: 9000
+      targetPort: 9000
